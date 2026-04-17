@@ -1,87 +1,119 @@
-import pyautogui
-import time
-import pyperclip
-import google.generativeai as genai
+import speech_recognition as sr
+import webbrowser
+import pyttsx3
+import musicLibrary
+import requests
+from openai import OpenAI
+from gtts import gTTS
+import pygame
+import os
 
-# Configure Google Gemini API
-GOOGLE_API_KEY = "YOUR_GOOGLE_API_KEY"
-genai.configure(api_key=GOOGLE_API_KEY)
+# pip install pocketsphinx
 
-# Initialize Gemini model
-model = genai.GenerativeModel("gemini-1.5-flash")
+recognizer = sr.Recognizer()
+engine = pyttsx3.init() 
+newsapi = "<Your Key Here>"
 
+def speak_old(text):
+    engine.say(text)
+    engine.runAndWait()
 
-# Function to check if last message is from specific sender
-def is_last_message_from_sender(chat_log, sender_name="Rohan Das"):
-    lines = chat_log.strip().split("\n")
-    if not lines:
-        return False
+def speak(text):
+    tts = gTTS(text)
+    tts.save('temp.mp3') 
+
+    # Initialize Pygame mixer
+    pygame.mixer.init()
+
+    # Load the MP3 file
+    pygame.mixer.music.load('temp.mp3')
+
+    # Play the MP3 file
+    pygame.mixer.music.play()
+
+    # Keep the program running until the music stops playing
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
     
-    last_message = lines[-1]
-    return sender_name in last_message
+    pygame.mixer.music.unload()
+    os.remove("temp.mp3") 
 
+def aiProcess(command):
+    client = OpenAI(api_key="<Your Key Here>",
+    )
 
-# Function to get reply from Gemini
-def ask_gemini(chat_log):
-    prompt = f"""
-You are a person named Naruto who speaks Hindi and English.
-You are from India and you are a coder.
-You analyze chat history and roast people in a funny way.
+    completion = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "system", "content": "You are a virtual assistant named jarvis skilled in general tasks like Alexa and Google Cloud. Give short responses please"},
+        {"role": "user", "content": command}
+    ]
+    )
 
-Chat history:
-{chat_log}
+    return completion.choices[0].message.content
 
-Reply with ONLY the next message. Do not include timestamp or name.
-"""
+def processCommand(c):
+    if "open google" in c.lower():
+        webbrowser.open("https://google.com")
+    elif "open facebook" in c.lower():
+        webbrowser.open("https://facebook.com")
+    elif "open youtube" in c.lower():
+        webbrowser.open("https://youtube.com")
+    elif "open linkedin" in c.lower():
+        webbrowser.open("https://linkedin.com")
+    elif c.lower().startswith("play"):
+        song = c.lower().split(" ")[1]
+        link = musicLibrary.music[song]
+        webbrowser.open(link)
 
-    response = model.generate_content(prompt)
-    return response.text.strip()
-
-
-# Main loop
-while True:
-    time.sleep(5)
-
-    # Select chat area
-    pyautogui.moveTo(972, 202)
-    pyautogui.dragTo(2213, 1278, duration=1.5, button='left')
-
-    # Copy selected text
-    pyautogui.hotkey('ctrl', 'c')
-    time.sleep(1)
-
-    # Click somewhere safe to remove selection
-    pyautogui.click(1994, 281)
-
-    # Get chat history from clipboard
-    chat_history = pyperclip.paste()
-
-    print("\nChat History:\n", chat_history)
-
-    # Check sender
-    if is_last_message_from_sender(chat_history, "Rohan Das"):
-
-        print("Last message from Rohan Das. Generating reply...")
-
-        reply = ask_gemini(chat_history)
-
-        print("Reply:", reply)
-
-        # Copy reply to clipboard
-        pyperclip.copy(reply)
-
-        # Click message input box
-        pyautogui.click(1808, 1328)
-        time.sleep(1)
-
-        # Paste reply
-        pyautogui.hotkey('ctrl', 'v')
-        time.sleep(1)
-
-        # Press Enter
-        pyautogui.press('enter')
-
-        print("Reply sent.")
+    elif "news" in c.lower():
+        r = requests.get(f"https://newsapi.org/v2/top-headlines?country=in&apiKey={newsapi}")
+        if r.status_code == 200:
+            # Parse the JSON response
+            data = r.json()
+            
+            # Extract the articles
+            articles = data.get('articles', [])
+            
+            # Print the headlines
+            for article in articles:
+                speak(article['title'])
 
     else:
-        print("Last message not from Rohan Das.")
+        # Let OpenAI handle the request
+        output = aiProcess(c)
+        speak(output) 
+
+
+
+
+
+if __name__ == "__main__":
+    speak("Initializing Jarvis....")
+    while True:
+        # Listen for the wake word "Jarvis"
+        # obtain audio from the microphone
+        r = sr.Recognizer()
+         
+        print("recognizing...")
+        try:
+            with sr.Microphone() as source:
+                print("Listening...")
+                audio = r.listen(source, timeout=2, phrase_time_limit=1)
+            word = r.recognize_google(audio)
+            if(word.lower() == "jarvis"):
+                speak("Ya")
+                # Listen for command
+                with sr.Microphone() as source:
+                    print("Jarvis Active...")
+                    audio = r.listen(source)
+                    command = r.recognize_google(audio)
+
+                    processCommand(command)
+
+
+        except Exception as e:
+            print("Error; {0}".format(e))
+
+
+
